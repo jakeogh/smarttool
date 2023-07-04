@@ -85,7 +85,7 @@ def cli(
         gvd.enable()
 
 
-@click.command()
+@cli.command()
 @click.argument("devices", type=str, nargs=-1)
 @click_add_options(click_global_options)
 @click.pass_context
@@ -126,7 +126,7 @@ def check(
         check_device(_v)
 
 
-@click.command()
+@cli.command()
 @click_add_options(click_global_options)
 @click.pass_context
 def check_all(
