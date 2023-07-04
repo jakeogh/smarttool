@@ -42,6 +42,7 @@ from clicktool import click_add_options
 from clicktool import click_global_options
 from clicktool import tv
 from devicetool import block_devices
+from eprint import eprint
 from unmp import unmp
 
 sh.mv = None  # use sh.busybox('mv'), coreutils ignores stdin read errors
@@ -76,7 +77,7 @@ def check_device(device: Path) -> bool:
     if "Probable ATA device behind a SAT layer" in _result:
         return True
     sys.stdout.write("\a")
-    icp(f"FALSE: {device}")
+    eprint(f"SMART FAIL: {device}")
     return False
 
 
@@ -167,3 +168,4 @@ def check_all(
             check_device(device)
         except NotSmartDeviceError:
             pass
+        eprint(f"PASS: {device}")
