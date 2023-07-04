@@ -25,180 +25,126 @@
 
 from __future__ import annotations
 
-# code style:
-#   avoid guessing on spelling, just write the word out
-#   dont_makedirs -> no_makedirs
-#   no guessing on case: local vars, functions and methods are lower case. classes are ThisClass(). Globals are THIS.
-#   del vars explicitely ASAP, assumptions are buggy
-#   rely on the compiler, code verbosity and explicitness can only be overruled by benchamrks (are really compiler bugs)
-#   no tabs. code must display the same independent of viewer
-#   no recursion, recursion is undecidiable, randomly bounded, and hard to reason about
-#   each elementis the same, no special cases for the first or last elemetnt:
-#       [1, 2, 3,] not [1, 2, 3]
-#       def this(*.
-#                a: bool,
-#                b: bool,
-#               ):
-#
-#   expicit loop control is better than while (condition):
-#       while True:
-#           # continue/break explicit logic
-#   only computer generated commit messages _should_ start with a cap letter
-
-
-# TODO:
-#   https://github.com/kvesteri/validators
 import os
 import sys
-import click
-import time
-import logging
-import sh
-from collections.abc import Sequence
-from clicktool import click_add_options, click_global_options
-from click_auto_help import AHGroup
-from signal import signal, SIGPIPE, SIG_DFL
 from pathlib import Path
-from mptool import output
-from mptool import mpd_enumerate
-from clicktool import tv
-from asserttool import validate_slice
-from eprint import eprint
+from signal import SIG_DFL
+from signal import SIGPIPE
+from signal import signal
+
+import click
+import sh
+from asserttool import gvd
 from asserttool import ic
 from asserttool import icp
-from asserttool import gvd
-from retry_on_exception import retry_on_exception
-from timetool import get_timestamp
-from rich import print as pprint
-
+from click_auto_help import AHGroup
+from clicktool import click_add_options
+from clicktool import click_global_options
+from clicktool import tv
+from devicetool import block_devices
 from unmp import unmp
-##from typing import Tuple
-#from typing import Generator
-#from typing import ByteString
-#from with_sshfs import sshfs
-#from with_chdir import chdir
-#from collections import defaultdict
-#from prettyprinter import cpprint
-#from prettyprinter import install_extras
-#install_extras(['attrs'])
-#from configtool import click_read_config
-#from configtool import click_write_config_entry
-#from asserttool import not_root
-#from pathtool import path_is_block_special
-#from pathtool import write_line_to_file
-#from getdents import files
-#from prettytable import PrettyTable
-#output_table = PrettyTable()
-
 
 sh.mv = None  # use sh.busybox('mv'), coreutils ignores stdin read errors
 
-
-# click-command-tree
-#from click_plugins import with_plugins
-#from pkg_resources import iter_entry_points
-
-# import pdb; pdb.set_trace()
-# #set_trace(term_size=(80, 24))
-# from pudb import set_trace; set_trace(paused=False)
-
-##def log_uncaught_exceptions(ex_cls, ex, tb):
-##   eprint(''.join(traceback.format_tb(tb)))
-##   eprint('{0}: {1}'.format(ex_cls, ex))
-##
-##sys.excepthook = log_uncaught_exceptions
-
-#this should be earlier in the imports, but isort stops working
+# this should be earlier in the imports, but isort stops working
 signal(SIGPIPE, SIG_DFL)
 
 
-# @with_plugins(iter_entry_points('click_command_tree'))
-# @click.group(no_args_is_help=True, cls=AHGroup)
-# @click_add_options(click_global_options)
-# @click.pass_context
-# def cli(ctx,
-#         verbose_inf: bool,
-#         dict_output: bool,
-#         verbose: bool | int | float = False,
-#         ) -> None:
-#
-#     tty, verbose = tv(ctx=ctx,
-#                       verbose=verbose,
-#                       verbose_inf=verbose_inf,
-#                       )
-#     if not verbose:
-#         ic.disable()
-#
-#     if verbose_inf:
-#         gvd.enable()
+def check_device(device: Path) -> bool:
+    # smartctl -x "${1}" | /bin/grep -E "(^SMART overall-health self-assessment test result: PASSED|^SMART Health Status: OK|Probable ATA device behind a SAT layer)" || { /home/cfg/sound/beep 10 ; exit 1 ; }
+    _result = sh.smartctl("-x", device).strip()
+    icp(_result)
+    if _result.startswith("SMART overall-health self-assessment test result: PASSED"):
+        return True
+    if _result.startswith("SMART Health Status: OK"):
+        return True
+    if _result.startswith("Probable ATA device behind a SAT layer"):
+        return True
+    sys.stdout.write("\a")
+    return False
 
 
-# update setup.py if changing function name
-#@click.argument("slice_syntax", type=validate_slice, nargs=1)
-@click.command()
-@click.argument('keys', type=str, nargs=-1)
-@click.argument("sysskel",
-                type=click.Path(exists=False,
-                                dir_okay=True,
-                                file_okay=False,
-                                allow_dash=False,
-                                path_type=Path,),
-                nargs=1,
-                required=True,)
-@click.option('--ipython', is_flag=True)
+@click.group(no_args_is_help=True, cls=AHGroup)
 @click_add_options(click_global_options)
 @click.pass_context
-def cli(ctx,
-        keys: tuple[str, ...],
-        sysskel: Path,
-        ipython: bool,
-        verbose_inf: bool,
-        dict_output: bool,
-        verbose: bool | int | float = False,
-        ) -> None:
-
-    tty, verbose = tv(ctx=ctx,
-                      verbose=verbose,
-                      verbose_inf=verbose_inf,
-                      )
+def cli(
+    ctx,
+    verbose_inf: bool,
+    dict_output: bool,
+    verbose: bool | int | float = False,
+) -> None:
+    tty, verbose = tv(
+        ctx=ctx,
+        verbose=verbose,
+        verbose_inf=verbose_inf,
+    )
     if not verbose:
         ic.disable()
 
     if verbose_inf:
         gvd.enable()
 
-    iterator: Sequence[dict | bytes | str] = unmp(valid_types=[dict, bytes, str],)
 
-    # need to send a single key, or multiple keys, if multiple keys, keys need to specified on the commandline
-    # either way, the output is still a dict
+@click.command()
+@click.argument("devices", type=str, nargs=-1)
+@click_add_options(click_global_options)
+@click.pass_context
+def check(
+    ctx,
+    devices: tuple[str, ...],
+    verbose_inf: bool,
+    dict_output: bool,
+    verbose: bool | int | float = False,
+) -> None:
+    tty, verbose = tv(
+        ctx=ctx,
+        verbose=verbose,
+        verbose_inf=verbose_inf,
+    )
+    if not verbose:
+        ic.disable()
+
+    if verbose_inf:
+        gvd.enable()
+
+    if not devices:
+        iterator = unmp(
+            valid_types=(bytes,),
+        )
+    else:
+        iterator = devices
 
     index = 0
     _k = None
-    for index, _mpobject, key_count in mpd_enumerate(iterator):
-        #if index == 0:
-        #    first_type = type(_mpobject)
-        #    if first_type == dict:
-        #        key_count = len(list(_mpobject.keys()))
-        #    else:
-        #        key_count = None
-        if key_count > 1:
-            assert len(keys) > 0
-        if isinstance(_mpobject, dict):
-            for _k, _v in _mpobject.items():
-                break   # assume single k:v dict
-        else:
-            _v = Path(os.fsdecode(_mpobject)).resolve()
+    for index, _mpobject in enumerate(iterator):
+        # if isinstance(_mpobject, dict):
+        #    for _k, _v in _mpobject.items():
+        #        break  # assume single k:v dict
+        # else:
+        _v = Path(os.fsdecode(_mpobject)).resolve()
         ic(index, _v)
+        check_device(_v)
 
-        #with open(_v, 'rb') as fh:
-        #    path_bytes_data = fh.read()
 
-        output(_v, reason=_mpobject, dict_output=dict_output, tty=tty,)
+@click.command()
+@click_add_options(click_global_options)
+@click.pass_context
+def check_all(
+    ctx,
+    verbose_inf: bool,
+    dict_output: bool,
+    verbose: bool | int | float = False,
+) -> None:
+    tty, verbose = tv(
+        ctx=ctx,
+        verbose=verbose,
+        verbose_inf=verbose_inf,
+    )
+    if not verbose:
+        ic.disable()
 
-#        if ipython:
-#            import IPython; IPython.embed()
+    if verbose_inf:
+        gvd.enable()
 
-if __name__ == '__main__':
-    # pylint: disable=E1120
-    cli()
-
+    for device in block_devices():
+        check_device(device)
