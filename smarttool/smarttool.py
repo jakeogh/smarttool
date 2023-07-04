@@ -59,10 +59,12 @@ def check_device(device: Path) -> bool:
     try:
         _result = sh.smartctl("-x", device).strip()
     except sh.ErrorReturnCode_1 as e:
-        icp(e)
-        icp(e.args[0])
+        ic(e)
+        # icp(e.args[0])
         if f"{device}: Unable to detect device type" in e.args[0]:
             raise NotSmartDeviceError(device)
+        else:
+            raise e
 
     icp(_result)
     if _result.startswith("SMART overall-health self-assessment test result: PASSED"):
@@ -158,4 +160,7 @@ def check_all(
         gvd.enable()
 
     for device in block_devices():
-        check_device(device)
+        try:
+            check_device(device)
+        except NotSmartDeviceError:
+            pass
