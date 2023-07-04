@@ -63,6 +63,8 @@ def check_device(device: Path) -> bool:
         # icp(e.args[0])
         if f"{device}: Unable to detect device type" in e.args[0]:
             raise NotSmartDeviceError(device)
+        elif f"{device}: Unknown USB bridge" in e.args[0]:
+            raise NotSmartDeviceError(device)
         else:
             raise e
 
