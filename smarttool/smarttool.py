@@ -50,9 +50,19 @@ sh.mv = None  # use sh.busybox('mv'), coreutils ignores stdin read errors
 signal(SIGPIPE, SIG_DFL)
 
 
+class NotSmartDeviceError(ValueError):
+    pass
+
+
 def check_device(device: Path) -> bool:
     # smartctl -x "${1}" | /bin/grep -E "(^SMART overall-health self-assessment test result: PASSED|^SMART Health Status: OK|Probable ATA device behind a SAT layer)" || { /home/cfg/sound/beep 10 ; exit 1 ; }
-    _result = sh.smartctl("-x", device).strip()
+    try:
+        _result = sh.smartctl("-x", device).strip()
+    except sh.ErrorReturnCode_1 as e:
+        icp(e)
+        # if f"{device}: Unable to detect device type" in _result:
+        raise NotSmartDeviceError(device)
+
     icp(_result)
     if _result.startswith("SMART overall-health self-assessment test result: PASSED"):
         return True
