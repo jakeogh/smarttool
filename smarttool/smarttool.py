@@ -60,8 +60,9 @@ def check_device(device: Path) -> bool:
         _result = sh.smartctl("-x", device).strip()
     except sh.ErrorReturnCode_1 as e:
         icp(e)
-        # if f"{device}: Unable to detect device type" in _result:
-        raise NotSmartDeviceError(device)
+        icp(e.args[0])
+        if f"{device}: Unable to detect device type" in e.args[0]:
+            raise NotSmartDeviceError(device)
 
     icp(_result)
     if _result.startswith("SMART overall-health self-assessment test result: PASSED"):
