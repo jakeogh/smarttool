@@ -68,7 +68,7 @@ def check_device(device: Path) -> bool:
         else:
             raise e
 
-    icp(_result)
+    # icp(_result)
     if _result.startswith("SMART overall-health self-assessment test result: PASSED"):
         return True
     if _result.startswith("SMART Health Status: OK"):
@@ -76,6 +76,7 @@ def check_device(device: Path) -> bool:
     if _result.startswith("Probable ATA device behind a SAT layer"):
         return True
     sys.stdout.write("\a")
+    icp(f"FALSE: {device}")
     return False
 
 
